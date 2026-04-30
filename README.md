@@ -13,6 +13,7 @@ A featherweight macOS menu-bar player. Hit a shortcut, type, watch — in a floa
   <img alt="Swift" src="https://img.shields.io/badge/Swift-AppKit%20%2B%20SwiftUI-FA7343?style=flat-square&logo=swift&logoColor=white" />
   <img alt="Universal" src="https://img.shields.io/badge/Universal-Apple%20Silicon%20%2B%20Intel-555?style=flat-square" />
   <img alt="Release" src="https://img.shields.io/badge/Release-DMG-2da44e?style=flat-square" />
+  <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" />
 </p>
 
 <a href="#install"><strong>Install</strong></a> ·
@@ -213,6 +214,14 @@ In the GitHub repo: **Settings → Secrets and variables → Actions → New rep
 
 - [YouTubePlayerKit](https://github.com/SvenTiigi/YouTubePlayerKit) by Sven Tiigi — the heavy lifting for the IFrame player.
 - The YouTube Data API team for keeping the search endpoint free and stable.
+
+---
+
+## License
+
+Floatube is released under the [MIT License](LICENSE) — © 2026 Ameer.
+
+You can use, copy, modify, and redistribute the code freely, in personal or commercial projects, as long as the copyright notice is preserved. The software comes with no warranty.
 
 ---
 
