@@ -1,0 +1,19 @@
+.ai
+.claude
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.xcworkspace/
+xcuserdata/
+*.xcuserdatad/
+DerivedData/
+.swiftpm/
+.build/
+Pods/
