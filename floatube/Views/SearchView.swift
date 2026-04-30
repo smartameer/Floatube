@@ -208,7 +208,7 @@ struct SearchView: View {
                     }
                     .help("Cancel")
 
-                    Button(role: .confirm) {
+                    Button {
                         commitNewPlaylist()
                     } label: {
                         Image(systemName: "checkmark")
@@ -260,7 +260,7 @@ struct SearchView: View {
                     }
                     .help("Cancel")
 
-                    Button(role: .confirm) {
+                    Button {
                         commitRenamePlaylist()
                     } label: {
                         Image(systemName: "checkmark")
