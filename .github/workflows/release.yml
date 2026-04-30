@@ -63,9 +63,81 @@ jobs:
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "Resolved version: ${VERSION}"
 
-      - name: Build DMG
+      - name: Set up signing identity
+        id: signing
+        env:
+          MAC_CERT_BASE64: ${{ secrets.MAC_CERT_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         run: |
           set -euo pipefail
+
+          if [ -z "${MAC_CERT_BASE64}" ] || [ -z "${MAC_CERT_PASSWORD}" ]; then
+            echo "MAC_CERT_BASE64 / MAC_CERT_PASSWORD secrets not configured."
+            echo "Falling back to ad-hoc signing (-)."
+            echo "Note: Keychain ACLs in the shipped app will not match across releases,"
+            echo "so end users will see a re-prompt after each update."
+            echo "identity=-" >> "${GITHUB_OUTPUT}"
+            echo "keychain=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          CERT_P12="${RUNNER_TEMP}/release-cert.p12"
+          CERT_PEM="${RUNNER_TEMP}/release-cert.pem"
+          KEYCHAIN_PATH="${RUNNER_TEMP}/release-build.keychain-db"
+          # Keychain password is ephemeral, never leaves this step. Not echoed.
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+
+          echo "${MAC_CERT_BASE64}" | base64 --decode > "${CERT_P12}"
+
+          # Extract the cert's CN to use as the codesign identity name. We never
+          # parse the (untrusted) self-signed cert — only its subject — so this is
+          # safe even if MAC_CERT_BASE64 is malformed (openssl will fail loudly).
+          openssl pkcs12 -in "${CERT_P12}" -nokeys -clcerts \
+            -passin "pass:${MAC_CERT_PASSWORD}" -out "${CERT_PEM}"
+          IDENTITY="$(openssl x509 -in "${CERT_PEM}" -noout -subject -nameopt RFC2253 \
+            | sed -nE 's/.*CN=([^,]+).*/\1/p')"
+          rm -f "${CERT_PEM}"
+          if [ -z "${IDENTITY}" ]; then
+            echo "::error::Could not extract CN from MAC_CERT_BASE64 cert subject."
+            exit 1
+          fi
+
+          # Fresh per-run keychain — auto-locks after 6h, deleted in cleanup step.
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+
+          # Append our keychain to the user search list so xcodebuild finds it.
+          # Stash the original list for restoration in the cleanup step.
+          ORIGINAL_LIST=$(security list-keychains -d user | sed -e 's/"//g' | xargs)
+          printf '%s\n' "${ORIGINAL_LIST}" > "${RUNNER_TEMP}/keychain-original-list.txt"
+          security list-keychains -d user -s "${KEYCHAIN_PATH}" ${ORIGINAL_LIST}
+
+          security import "${CERT_P12}" -P "${MAC_CERT_PASSWORD}" \
+            -A -t cert -f pkcs12 -k "${KEYCHAIN_PATH}"
+          rm -f "${CERT_P12}"
+
+          # Authorise codesign + Apple tools to use the private key non-interactively.
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+
+          echo "identity=${IDENTITY}" >> "${GITHUB_OUTPUT}"
+          echo "keychain=${KEYCHAIN_PATH}" >> "${GITHUB_OUTPUT}"
+          echo "Signing identity: ${IDENTITY}"
+
+      - name: Build DMG
+        env:
+          SIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          SIGN_KEYCHAIN: ${{ steps.signing.outputs.keychain }}
+        run: |
+          set -euo pipefail
+
+          SIGN_FLAGS="--timestamp=none"
+          if [ -n "${SIGN_KEYCHAIN}" ]; then
+            SIGN_FLAGS="${SIGN_FLAGS} --keychain ${SIGN_KEYCHAIN}"
+          fi
+
           xcodebuild \
             -project "${PROJECT}" \
             -scheme "${SCHEME}" \
@@ -73,9 +145,9 @@ jobs:
             -derivedDataPath "${DERIVED_DATA}" \
             -destination 'generic/platform=macOS' \
             CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_IDENTITY="${SIGN_IDENTITY}" \
             DEVELOPMENT_TEAM="" \
-            OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
+            OTHER_CODE_SIGN_FLAGS="${SIGN_FLAGS}" \
             build
 
       - name: Locate built app
@@ -85,11 +157,18 @@ jobs:
           APP_PATH="${DERIVED_DATA}/Build/Products/${CONFIGURATION}/${PRODUCT_NAME}.app"
           if [ ! -d "${APP_PATH}" ]; then
             echo "::error::Built app not found at ${APP_PATH}"
-            find "${DERIVED_DATA}/Build/Products" -maxdepth 3 -name '*.app' -print || true
+            if [ -d "${DERIVED_DATA}/Build/Products" ]; then
+              echo "Existing .app bundles in build output:"
+              find "${DERIVED_DATA}/Build/Products" -maxdepth 3 -name '*.app' -print
+            fi
             exit 1
           fi
           echo "app_path=${APP_PATH}" >> "${GITHUB_OUTPUT}"
-          /usr/bin/codesign -dvv "${APP_PATH}" 2>&1 | head -n 20 || true
+          # Diagnostic: log identity, signature kind, and DR. These determine
+          # cross-release Keychain ACL stability for the shipped app.
+          /usr/bin/codesign -dvv "${APP_PATH}" 2>&1 | head -n 20
+          echo "--- Designated Requirement ---"
+          /usr/bin/codesign -d -r- "${APP_PATH}" 2>&1 | head -n 5
 
       - name: Stage DMG contents
         env:
@@ -136,9 +215,10 @@ jobs:
           prerelease: false
           generate_release_notes: true
           body: |
-            **Unsigned (ad-hoc signed) macOS build of Floatube `${{ steps.version.outputs.version }}`.**
+            macOS build of Floatube `${{ steps.version.outputs.version }}`.
 
-            This build is **not** notarized (no paid Apple Developer membership). macOS Gatekeeper will warn on first launch.
+            Signed with a self-signed certificate (no paid Apple Developer membership) and
+            **not** notarized — macOS Gatekeeper will warn on first launch.
 
             ## Install
             1. Download the `.dmg` below and double-click to mount.
@@ -152,3 +232,25 @@ jobs:
             ```
 
             Built from commit `${{ github.sha }}`.
+
+      - name: Tear down signing keychain
+        if: always()
+        env:
+          SIGN_KEYCHAIN: ${{ steps.signing.outputs.keychain }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGN_KEYCHAIN:-}" ]; then
+            echo "No signing keychain was created (ad-hoc fallback). Nothing to clean up."
+            exit 0
+          fi
+          if [ ! -f "${SIGN_KEYCHAIN}" ]; then
+            echo "Signing keychain already removed: ${SIGN_KEYCHAIN}"
+            exit 0
+          fi
+          ORIG_LIST_FILE="${RUNNER_TEMP}/keychain-original-list.txt"
+          if [ -f "${ORIG_LIST_FILE}" ]; then
+            ORIGINAL_LIST=$(cat "${ORIG_LIST_FILE}")
+            security list-keychains -d user -s ${ORIGINAL_LIST}
+          fi
+          security delete-keychain "${SIGN_KEYCHAIN}"
+          echo "Removed signing keychain."
