@@ -206,8 +206,6 @@ In the GitHub repo: **Settings → Secrets and variables → Actions → New rep
 
 </details>
 
-> **Note:** Floatube is **not** notarized. Without a paid Apple Developer Program membership, notarization is not possible. Users see the standard "unidentified developer" warning on first launch and bypass once via right-click → Open.
-
 ---
 
 ## Acknowledgments
