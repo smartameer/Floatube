@@ -17,3 +17,6 @@ DerivedData/
 .swiftpm/
 .build/
 Pods/
+
+build/
+dmg-*

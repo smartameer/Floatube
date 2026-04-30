@@ -7,17 +7,31 @@ struct ResultRowView: View {
     var body: some View {
         Button(action: onPlay) {
             HStack(spacing: 10) {
-                AsyncImage(url: item.thumbnailURL) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(16/9, contentMode: .fill)
-                } placeholder: {
-                    Rectangle()
-                        .fill(.quaternary)
-                        .overlay {
-                            Image(systemName: "play.rectangle")
-                                .foregroundStyle(.secondary)
-                        }
+                ZStack(alignment: .bottomTrailing) {
+                    AsyncImage(url: item.thumbnailURL) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(16/9, contentMode: .fill)
+                    } placeholder: {
+                        Rectangle()
+                            .fill(.quaternary)
+                            .overlay {
+                                Image(systemName: "play.rectangle")
+                                    .foregroundStyle(.secondary)
+                            }
+                    }
+
+                    if let duration = item.duration {
+                        Text(duration)
+                            .font(.caption2.monospacedDigit())
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(.black.opacity(0.75))
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .padding(4)
+                    }
                 }
                 .frame(width: 128, height: 72)
                 .clipShape(RoundedRectangle(cornerRadius: 5))

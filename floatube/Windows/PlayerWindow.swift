@@ -12,8 +12,10 @@ class PlayerWindow: NSPanel {
     private var opacityObserver: NSObjectProtocol?
     private var playbackEndObserver: AnyCancellable?
     let videoTitle: String
+    let duration: String?
 
-    init(videoId: String, videoTitle: String, startTime: Double = 0) {
+    init(videoId: String, videoTitle: String, startTime: Double = 0, duration: String? = nil) {
+        self.duration = duration
         self.videoId = videoId
         self.videoTitle = videoTitle
         self.player = YouTubePlayer(
@@ -42,7 +44,7 @@ class PlayerWindow: NSPanel {
             defer: false
         )
 
-        title = "Floatube — \(videoTitle)"
+        title = "Floatube"
         titlebarAppearsTransparent = true
         level = .floating
         isFloatingPanel = true
@@ -209,7 +211,8 @@ class PlayerWindow: NSPanel {
               let playlist = store.playlists.first else { return }
         store.addItem(PlaylistItem(
             videoId: videoId, title: videoTitle, channelTitle: "",
-            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg")
+            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg"),
+            duration: duration
         ), to: playlist.id)
     }
 
@@ -219,7 +222,8 @@ class PlayerWindow: NSPanel {
         guard index < store.playlists.count else { return }
         store.addItem(PlaylistItem(
             videoId: videoId, title: videoTitle, channelTitle: "",
-            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg")
+            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg"),
+            duration: duration
         ), to: store.playlists[index].id)
     }
 

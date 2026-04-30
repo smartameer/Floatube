@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version label for the artifact (e.g. 1.2.3). Leave blank to derive from tag or commit.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build DMG
+    runs-on: macos-latest
+
+    env:
+      SCHEME: flotube
+      PROJECT: floatube.xcodeproj
+      CONFIGURATION: Release
+      PRODUCT_NAME: floatube
+      DERIVED_DATA: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain info
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Resolve and validate version
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
+          elif [[ "${REF}" == refs/tags/v* ]]; then
+            VERSION="${REF#refs/tags/v}"
+          else
+            VERSION="0.0.0-$(git rev-parse --short HEAD)"
+          fi
+          # Whitelist: alphanumerics, dot, dash, underscore, plus. Reject anything else
+          # to prevent shell/path injection via tag names or workflow_dispatch input.
+          if ! [[ "${VERSION}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+            echo "::error::Refusing unsafe version string: ${VERSION}"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Build DMG
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "${PROJECT}" \
+            -scheme "${SCHEME}" \
+            -configuration "${CONFIGURATION}" \
+            -derivedDataPath "${DERIVED_DATA}" \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY=- \
+            DEVELOPMENT_TEAM="" \
+            OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
+            build
+
+      - name: Locate built app
+        id: locate
+        run: |
+          set -euo pipefail
+          APP_PATH="${DERIVED_DATA}/Build/Products/${CONFIGURATION}/${PRODUCT_NAME}.app"
+          if [ ! -d "${APP_PATH}" ]; then
+            echo "::error::Built app not found at ${APP_PATH}"
+            find "${DERIVED_DATA}/Build/Products" -maxdepth 3 -name '*.app' -print || true
+            exit 1
+          fi
+          echo "app_path=${APP_PATH}" >> "${GITHUB_OUTPUT}"
+          /usr/bin/codesign -dvv "${APP_PATH}" 2>&1 | head -n 20 || true
+
+      - name: Stage DMG contents
+        env:
+          APP_PATH: ${{ steps.locate.outputs.app_path }}
+        run: |
+          set -euo pipefail
+          rm -rf dmg-staging
+          mkdir -p dmg-staging
+          cp -R "${APP_PATH}" dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+
+      - name: Create DMG
+        id: dmg
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DMG_NAME="${PRODUCT_NAME}-${VERSION}.dmg"
+          hdiutil create \
+            -volname "Floatube" \
+            -srcfolder dmg-staging \
+            -ov \
+            -format UDZO \
+            "${DMG_NAME}"
+          ls -lh "${DMG_NAME}"
+          echo "dmg_path=${DMG_NAME}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PRODUCT_NAME }}-${{ steps.version.outputs.version }}-dmg
+          path: ${{ steps.dmg.outputs.dmg_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach DMG to GitHub Release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.dmg.outputs.dmg_path }}
+          name: Floatube ${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            **Unsigned (ad-hoc signed) macOS build of Floatube `${{ steps.version.outputs.version }}`.**
+
+            This build is **not** notarized (no paid Apple Developer membership). macOS Gatekeeper will warn on first launch.
+
+            ## Install
+            1. Download the `.dmg` below and double-click to mount.
+            2. Drag **Floatube.app** into the **Applications** folder.
+            3. Right-click **Floatube** in Applications → **Open** → confirm in the dialog.
+               (Subsequent launches open normally.)
+
+            If the right-click dialog still refuses, run once in Terminal:
+            ```
+            xattr -dr com.apple.quarantine /Applications/floatube.app
+            ```
+
+            Built from commit `${{ github.sha }}`.

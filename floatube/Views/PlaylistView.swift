@@ -143,10 +143,24 @@ struct PlaylistView: View {
                                     Text(item.title)
                                         .lineLimit(1)
                                         .font(.body)
-                                    Text(item.channelTitle)
-                                        .lineLimit(1)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    HStack(spacing: 4) {
+                                        if !item.channelTitle.isEmpty {
+                                            Text(item.channelTitle)
+                                                .lineLimit(1)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        if let duration = item.duration {
+                                            if !item.channelTitle.isEmpty {
+                                                Text("·")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                            Text(duration)
+                                                .font(.caption.monospacedDigit())
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                    }
                                 }
 
                                 Spacer()

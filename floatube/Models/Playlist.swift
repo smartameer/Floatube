@@ -9,12 +9,15 @@ struct PlaylistItem: Identifiable, Codable, Hashable {
     let thumbnailURL: URL?
     let addedAt: Date
 
-    init(videoId: String, title: String, channelTitle: String, thumbnailURL: URL?) {
+    let duration: String?
+
+    init(videoId: String, title: String, channelTitle: String, thumbnailURL: URL?, duration: String? = nil) {
         self.id = UUID()
         self.videoId = videoId
         self.title = title
         self.channelTitle = channelTitle
         self.thumbnailURL = thumbnailURL
+        self.duration = duration
         self.addedAt = Date()
     }
 }

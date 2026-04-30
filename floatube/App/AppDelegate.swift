@@ -127,8 +127,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupFloatPanel() {
         floatPanel = FloatPanel()
-        let searchView = SearchView { [weak self] videoId, title, startTime in
-            self?.detachVideo(videoId: videoId, title: title, startTime: startTime)
+        let searchView = SearchView { [weak self] videoId, title, startTime, duration in
+            self?.detachVideo(videoId: videoId, title: title, startTime: startTime, duration: duration)
         }
         floatPanel.contentView = NSHostingView(rootView: searchView)
     }
@@ -279,7 +279,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         floatPanel.toggleVisibility()
     }
 
-    func detachVideo(videoId: String, title: String, startTime: Double) {
+    func detachVideo(videoId: String, title: String, startTime: Double, duration: String? = nil) {
         for window in playerWindows {
             window.delegate = nil
             window.close()
@@ -291,7 +291,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.post(name: .floatubeDetachedPlayerActive, object: nil, userInfo: ["active": true])
         PlayerWindow.pauseSystemMedia()
 
-        let window = PlayerWindow(videoId: videoId, videoTitle: title, startTime: startTime)
+        let window = PlayerWindow(videoId: videoId, videoTitle: title, startTime: startTime, duration: duration)
         window.delegate = self
         window.onAttach = { [weak self] vid, time in
             self?.attachVideo(videoId: vid, time: time)
@@ -321,6 +321,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate: NSWindowDelegate {
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        guard sender is PlayerWindow else { return frameSize }
+        return NSSize(width: max(frameSize.width, 320), height: max(frameSize.height, 210))
+    }
+
     func windowWillClose(_ notification: Notification) {
         if let window = notification.object as? PlayerWindow {
             let wasAttaching = window.isAttaching

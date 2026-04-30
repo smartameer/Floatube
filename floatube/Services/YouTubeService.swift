@@ -60,13 +60,23 @@ class YouTubeService {
                 let searchResponse = try JSONDecoder().decode(YouTubeSearchResponse.self, from: data)
 
                 let dateFormatter = ISO8601DateFormatter()
-                let items = searchResponse.items.map { item in
+                var items = searchResponse.items.map { item in
                     YouTubeItem(
                         id: item.id.videoId,
                         title: item.snippet.title.decodingHTMLEntities(),
                         channelTitle: item.snippet.channelTitle,
                         thumbnailURL: URL(string: item.snippet.thumbnails.medium.url),
-                        publishedAt: dateFormatter.date(from: item.snippet.publishedAt)
+                        publishedAt: dateFormatter.date(from: item.snippet.publishedAt),
+                        duration: nil
+                    )
+                }
+
+                let durations = await fetchDurations(videoIds: items.map(\.id), apiKey: key)
+                items = items.map { item in
+                    YouTubeItem(
+                        id: item.id, title: item.title, channelTitle: item.channelTitle,
+                        thumbnailURL: item.thumbnailURL, publishedAt: item.publishedAt,
+                        duration: durations[item.id]
                     )
                 }
 
@@ -86,6 +96,50 @@ class YouTubeService {
         }
 
         isLoading = false
+    }
+
+    // MARK: - Duration helpers
+
+    private func fetchDurations(videoIds: [String], apiKey: String) async -> [String: String] {
+        var components = URLComponents(string: "https://www.googleapis.com/youtube/v3/videos")!
+        components.queryItems = [
+            URLQueryItem(name: "part", value: "contentDetails"),
+            URLQueryItem(name: "id", value: videoIds.joined(separator: ",")),
+            URLQueryItem(name: "key", value: apiKey)
+        ]
+        guard let url = components.url,
+              let (data, _) = try? await URLSession.shared.data(from: url),
+              let response = try? JSONDecoder().decode(YouTubeVideosResponse.self, from: data) else {
+            return [:]
+        }
+        var result: [String: String] = [:]
+        for item in response.items {
+            if let d = Self.parseDuration(item.contentDetails.duration) {
+                result[item.id] = d
+            }
+        }
+        return result
+    }
+
+    static func parseDuration(_ iso: String) -> String? {
+        guard iso.hasPrefix("PT") else { return nil }
+        var s = String(iso.dropFirst(2))
+        var hours = 0, minutes = 0, seconds = 0
+        if let r = s.range(of: "H") {
+            hours = Int(s[s.startIndex..<r.lowerBound]) ?? 0
+            s = String(s[r.upperBound...])
+        }
+        if let r = s.range(of: "M") {
+            minutes = Int(s[s.startIndex..<r.lowerBound]) ?? 0
+            s = String(s[r.upperBound...])
+        }
+        if let r = s.range(of: "S") {
+            seconds = Int(s[s.startIndex..<r.lowerBound]) ?? 0
+        }
+        guard hours + minutes + seconds > 0 else { return nil }
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
+            : String(format: "%d:%02d", minutes, seconds)
     }
 }
 
@@ -136,6 +190,19 @@ private struct YouTubeThumbnails: Codable {
 
 private struct YouTubeThumbnail: Codable {
     let url: String
+}
+
+private struct YouTubeVideosResponse: Codable {
+    let items: [YouTubeVideoDetail]
+}
+
+private struct YouTubeVideoDetail: Codable {
+    let id: String
+    let contentDetails: YouTubeContentDetails
+}
+
+private struct YouTubeContentDetails: Codable {
+    let duration: String
 }
 
 // MARK: - API Error Models

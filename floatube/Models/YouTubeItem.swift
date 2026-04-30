@@ -6,4 +6,5 @@ struct YouTubeItem: Identifiable, Codable, Hashable {
     let channelTitle: String
     let thumbnailURL: URL?
     let publishedAt: Date?
+    let duration: String?
 }

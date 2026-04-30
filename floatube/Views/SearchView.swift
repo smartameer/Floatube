@@ -21,8 +21,9 @@ struct SearchView: View {
     @State private var renamePlaylistName = ""
     @State private var searchClearTask: Task<Void, Never>?
     @State private var hasDetachedPlayer = false
+    @State private var playingVideoDuration: String?
 
-    var onDetachVideo: (String, String, Double) -> Void
+    var onDetachVideo: (String, String, Double, String?) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,10 +74,12 @@ struct SearchView: View {
                 guard let videoId = playingVideoId, let player = youtubePlayer else { continue }
                 let seconds = (try? await player.getCurrentTime())?.converted(to: .seconds).value ?? 0
                 let title = playingVideoTitle
+                let dur = playingVideoDuration
                 playingVideoId = nil
                 playingVideoTitle = ""
+                playingVideoDuration = nil
                 youtubePlayer = nil
-                onDetachVideo(videoId, title, seconds)
+                onDetachVideo(videoId, title, seconds, dur)
             }
         }
         .task {
@@ -325,7 +328,7 @@ struct SearchView: View {
                             let shuffled = currentPlaylist.shuffled()
                             guard let item = shuffled.first else { return }
                             postPlaylistQueue(items: shuffled, currentVideoId: item.videoId)
-                            onDetachVideo(item.videoId, item.title, 0)
+                            onDetachVideo(item.videoId, item.title, 0, item.duration)
                         } label: {
                             Image(systemName: "shuffle")
                                 .font(.title2)
@@ -340,7 +343,7 @@ struct SearchView: View {
                             guard playingVideoId == nil else { return }
                             guard let item = currentPlaylist.first else { return }
                             postPlaylistQueue(items: currentPlaylist, currentVideoId: item.videoId)
-                            onDetachVideo(item.videoId, item.title, 0)
+                            onDetachVideo(item.videoId, item.title, 0, item.duration)
                         } label: {
                             Image(systemName: "play.fill")
                                 .font(.title2)
@@ -437,7 +440,7 @@ struct SearchView: View {
                     .padding(.bottom, 8)
 
                 Button {
-                    onDetachVideo(videoId, title, time)
+                    onDetachVideo(videoId, title, time, nil)
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "play.fill")
@@ -474,6 +477,7 @@ struct SearchView: View {
                 Button {
                     playingVideoId = nil
                     playingVideoTitle = ""
+                    playingVideoDuration = nil
                     youtubePlayer = nil
                 } label: {
                     Image(systemName: "chevron.left")
@@ -499,10 +503,12 @@ struct SearchView: View {
                     Task {
                         let seconds = (try? await player.getCurrentTime())?.converted(to: .seconds).value ?? 0
                         let title = playingVideoTitle
+                        let dur = playingVideoDuration
                         playingVideoId = nil
+                        playingVideoDuration = nil
                         youtubePlayer = nil
                         DispatchQueue.main.async {
-                            onDetachVideo(videoId, title, seconds)
+                            onDetachVideo(videoId, title, seconds, dur)
                         }
                     }
                 } label: {
@@ -642,15 +648,17 @@ struct SearchView: View {
     }
 
     private func playVideo(id: String, title: String) {
+        let duration = youtubeService.results.first(where: { $0.id == id })?.duration
         if hasDetachedPlayer {
-            onDetachVideo(id, title, 0)
+            onDetachVideo(id, title, 0, duration)
         } else if isInlineMode {
             PlayerWindow.pauseSystemMedia()
             youtubePlayer = makePlayer(videoId: id)
             playingVideoTitle = title
+            playingVideoDuration = duration
             playingVideoId = id
         } else {
-            onDetachVideo(id, title, 0)
+            onDetachVideo(id, title, 0, duration)
         }
     }
 
@@ -659,7 +667,8 @@ struct SearchView: View {
             videoId: videoId,
             title: playingVideoTitle,
             channelTitle: "",
-            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg")
+            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(videoId)/mqdefault.jpg"),
+            duration: playingVideoDuration
         )
         if playlistStore.playlists.count == 1, let playlist = playlistStore.playlists.first {
             playlistStore.addItem(item, to: playlist.id)
