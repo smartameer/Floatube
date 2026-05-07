@@ -217,7 +217,7 @@ jobs:
           body: |
             macOS build of Floatube `${{ steps.version.outputs.version }}`.
 
-            Signed with a self-signed certificate (no paid Apple Developer membership) and
+            Signed with a self-signed certificate and
             **not** notarized — macOS Gatekeeper will warn on first launch.
 
             ## Install

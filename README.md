@@ -36,6 +36,37 @@ It lives in your menu bar, takes no space in the Dock, and pops a search field d
 
 ---
 
+## Screens
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="screens/Search.jpg" alt="Search panel" width="420" />
+      <br />
+      <sub><strong>Search</strong> — type to find videos; recent searches surface instantly when the panel opens.</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="screens/InlinePlayer.jpg" alt="Inline player" width="420" />
+      <br />
+      <sub><strong>Inline player</strong> — pick a result and watch right inside the dropdown panel.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="screens/FloatingPlayer.jpg" alt="Floating player" width="420" />
+      <br />
+      <sub><strong>Floating player</strong> — detach into an always-on-top window with adjustable opacity and corner snapping.</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="screens/Playlist.jpg" alt="Playlists" width="420" />
+      <br />
+      <sub><strong>Playlists</strong> — build local queues that auto-advance to the next track.</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## Features
 
 | | |
